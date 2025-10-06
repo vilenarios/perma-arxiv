@@ -1,0 +1,38 @@
+node_modules/
+dist/
+*.log
+.env
+.env.local
+data/
+downloads/
+index/
+arxiv.db
+arxiv.db-journal
+.DS_Store
+*.tmp
+*.lock
+
+# Arweave wallet files
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json
+!manifest.json
+arweave-keyfile-*.json
+wallet.json
+
+# Parquet files
+*.parquet
+
+# Web bundles
+web/duckdb-bundle/
+web/arxiv-index-*.html
+deployment-manifest*.json
+
+# Backup files
+backup_*
+*.backup
+
+# IDE
+.vscode/
+.idea/
