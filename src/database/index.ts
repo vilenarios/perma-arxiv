@@ -281,15 +281,20 @@ export class Database {
   }
 
   async getUndownloadedPapers(limit: number = 100): Promise<ArxivPaper[]> {
+    // Ensure limit is a valid number (commander might pass null/undefined)
+    const validLimit = limit || 100;
+
     return new Promise((resolve, reject) => {
       this.db.all(
         `SELECT * FROM papers
-         WHERE downloaded = 0 AND error_count < 3
+         WHERE downloaded = 0
+         AND error_count < 3
          ORDER BY updated DESC
          LIMIT ?`,
-        [limit],
+        [validLimit],
         (err, rows: any[]) => {
           if (err) {
+            logger.error('getUndownloadedPapers query failed', { error: err, limit: validLimit });
             reject(err);
           } else {
             const papers = rows.map(row => ({
