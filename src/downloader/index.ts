@@ -10,8 +10,11 @@ import logger from '../utils/logger';
 export class PdfDownloader {
   private limiter: ReturnType<typeof pLimit>;
   private downloadDir: string;
+  private currentDelay: number = 1000; // Start with 1 second
+  private consecutiveSuccesses: number = 0;
+  private consecutiveFailures: number = 0;
 
-  constructor(downloadDir: string = DOWNLOAD_DIR, maxConcurrent: number = 2) {
+  constructor(downloadDir: string = DOWNLOAD_DIR, maxConcurrent: number = 1) {
     this.downloadDir = downloadDir;
     this.limiter = pLimit(maxConcurrent);
   }
@@ -19,26 +22,26 @@ export class PdfDownloader {
   async ensureDownloadDirectory(): Promise<void> {
     try {
       await fs.mkdir(this.downloadDir, { recursive: true });
-
-      const categories = ['cs', 'math', 'physics', 'q-bio', 'stat'];
-      for (const category of categories) {
-        await fs.mkdir(path.join(this.downloadDir, category), { recursive: true });
-      }
     } catch (error) {
       logger.error('Failed to create download directory', { error });
       throw error;
     }
   }
 
-  private getDownloadPath(paper: ArxivPaper): string {
+  private async getDownloadPath(paper: ArxivPaper): Promise<string> {
     const category = paper.categories[0]?.split('.')[0] || 'misc';
+    const categoryDir = path.join(this.downloadDir, category);
+
+    // Ensure category directory exists
+    await fs.mkdir(categoryDir, { recursive: true });
+
     const filename = `${paper.id.replace('/', '_')}_v${paper.version}.pdf`;
-    return path.join(this.downloadDir, category, filename);
+    return path.join(categoryDir, filename);
   }
 
   async downloadPdf(paper: ArxivPaper): Promise<string> {
     return this.limiter(async () => {
-      const downloadPath = this.getDownloadPath(paper);
+      const downloadPath = await this.getDownloadPath(paper);
 
       try {
         await fs.access(downloadPath);
@@ -69,8 +72,39 @@ export class PdfDownloader {
           return new Promise<string>((resolve, reject) => {
             writer.on('finish', async () => {
               try {
+                // Validate the file is actually a PDF
+                const fileBuffer = await fs.readFile(tempPath);
+                const isPdf = fileBuffer.length > 100 &&
+                             fileBuffer[0] === 0x25 &&
+                             fileBuffer[1] === 0x50 &&
+                             fileBuffer[2] === 0x44 &&
+                             fileBuffer[3] === 0x46; // %PDF
+
+                if (!isPdf) {
+                  await fs.unlink(tempPath).catch(() => {});
+                  const preview = fileBuffer.slice(0, 200).toString('utf-8');
+                  if (preview.includes('reCAPTCHA') || preview.includes('arXiv.org')) {
+                    throw new Error(`ArXiv rate limit detected (reCAPTCHA). Please wait and retry later.`);
+                  }
+                  throw new Error(`Downloaded file is not a valid PDF. Got: ${preview.substring(0, 100)}`);
+                }
+
                 await fs.rename(tempPath, downloadPath);
                 logger.info(`Downloaded: ${paper.id} -> ${downloadPath}`);
+
+                // Track success and adjust delay
+                this.consecutiveSuccesses++;
+                this.consecutiveFailures = 0;
+
+                // If we've had 10 successful downloads, try speeding up
+                if (this.consecutiveSuccesses >= 10 && this.currentDelay > 500) {
+                  this.currentDelay = Math.max(500, this.currentDelay - 200);
+                  logger.info(`Reducing delay to ${this.currentDelay}ms after ${this.consecutiveSuccesses} successes`);
+                }
+
+                // Add adaptive delay between downloads
+                await new Promise(resolve => setTimeout(resolve, this.currentDelay));
+
                 resolve(downloadPath);
               } catch (error) {
                 reject(error);
@@ -100,6 +134,14 @@ export class PdfDownloader {
             logger.warn(`Download failed for ${paper.id}, attempt ${error.attemptNumber}/${DEFAULT_RATE_LIMIT.retryAttempts}`, {
               error: error.message
             });
+
+            // If we hit rate limit (reCAPTCHA), back off significantly
+            if (error.message.includes('reCAPTCHA') || error.message.includes('rate limit')) {
+              this.consecutiveFailures++;
+              this.consecutiveSuccesses = 0;
+              this.currentDelay = Math.min(10000, this.currentDelay * 2); // Double delay, max 10s
+              logger.warn(`Rate limit detected! Increasing delay to ${this.currentDelay}ms`);
+            }
           }
         }
       );
@@ -131,7 +173,7 @@ export class PdfDownloader {
 
   async checkExisting(paper: ArxivPaper): Promise<boolean> {
     try {
-      const downloadPath = this.getDownloadPath(paper);
+      const downloadPath = await this.getDownloadPath(paper);
       await fs.access(downloadPath);
       return true;
     } catch {

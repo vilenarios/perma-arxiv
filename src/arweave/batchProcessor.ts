@@ -18,7 +18,7 @@ export class BatchProcessor {
   constructor(
     walletPath: string = './wallet.json',
     dbPath?: string,
-    indexDir?: string
+    _indexDir?: string
   ) {
     this.db = new Database(dbPath);
     this.uploader = new TurboUploader(walletPath);
@@ -33,7 +33,6 @@ export class BatchProcessor {
   async processBatch(options: BatchUploadOptions = {}): Promise<void> {
     const {
       batchSize = 10,
-      maxRetries = 3,
       delayBetweenBatches = 5000,
       dryRun = false
     } = options;
@@ -71,7 +70,7 @@ export class BatchProcessor {
       }
 
       // Prepare papers for upload
-      const uploadQueue = [];
+      const uploadQueue: any[] = [];
       for (const paper of papers) {
         if (!paper.download_path) {
           logger.warn(`Paper ${paper.id} has no download path, skipping`);

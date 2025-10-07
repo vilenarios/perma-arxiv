@@ -13,6 +13,9 @@
  * Result: A permanent, self-contained archive on Arweave
  */
 
+// Load environment variables FIRST
+require('dotenv').config();
+
 const { TurboFactory } = require('@ardrive/turbo-sdk');
 const fs = require('fs/promises');
 const path = require('path');
@@ -37,6 +40,8 @@ class SmartDeployer {
     async initialize() {
         console.log('🚀 Smart ArXiv Archive Deployment\n');
         console.log('=' .repeat(60) + '\n');
+
+        console.log(`📁 Using wallet from: ${WALLET_PATH}\n`);
 
         const jwk = JSON.parse(await fs.readFile(WALLET_PATH, 'utf-8'));
         this.turbo = TurboFactory.authenticated({ privateKey: jwk });

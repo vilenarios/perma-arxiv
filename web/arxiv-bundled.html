@@ -4,6 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ArXiv Archive - Permanent Bundle</title>
+
+    <!-- Import map for dependencies -->
+    <script type="importmap">
+    {
+        "imports": {
+            "apache-arrow": "https://cdn.jsdelivr.net/npm/apache-arrow@13.0.0/+esm"
+        }
+    }
+    </script>
+
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -179,8 +189,8 @@
                    value="__PARQUET_TX_ID__">
 
             <div style="margin-top: 10px;">
-                <button onclick="loadParquet()">Load Archive</button>
-                <button onclick="loadDefault()" id="loadDefaultBtn">Load Default Archive</button>
+                <button id="loadBtn">Load Archive</button>
+                <button id="loadDefaultBtn">Load Default Archive</button>
             </div>
 
             <div class="stats" id="stats" style="display:none;">
@@ -206,9 +216,9 @@
                    placeholder="Search papers by title, abstract, or authors...">
 
             <div>
-                <button onclick="search()">Search</button>
-                <button onclick="browse()">Browse Latest</button>
-                <button onclick="showStats()">Show Statistics</button>
+                <button id="searchBtn">Search</button>
+                <button id="browseBtn">Browse Latest</button>
+                <button id="statsBtn">Show Statistics</button>
             </div>
 
             <div class="results" id="results"></div>
@@ -223,8 +233,12 @@
 
     <!-- DuckDB-WASM Module Loading -->
     <script type="module">
+        console.log('🔵 Module script starting...');
+
         // Import DuckDB from bundled files (not CDN!)
         import * as duckdb from './duckdb-bundle/duckdb-browser.mjs';
+
+        console.log('🔵 DuckDB module imported:', typeof duckdb);
 
         let db = null;
         let conn = null;
@@ -237,10 +251,10 @@
             try {
                 console.log('Initializing DuckDB from bundled files...');
 
-                // Configure bundles to use local files
+                // Configure bundles to use local files (absolute paths from web root)
                 const bundle = {
-                    mainModule: './duckdb-bundle/duckdb-mvp.wasm',
-                    mainWorker: './duckdb-bundle/duckdb-browser-mvp.worker.js'
+                    mainModule: '/duckdb-bundle/duckdb-mvp.wasm',
+                    mainWorker: '/duckdb-bundle/duckdb-browser-mvp.worker.js'
                 };
 
                 // Create worker
@@ -264,7 +278,8 @@
         }
 
         // Load Parquet file using HTTP range requests
-        window.loadParquet = async function() {
+        console.log('🔵 Defining loadParquet function...');
+        async function loadParquet() {
             const input = document.getElementById('parquetInput').value.trim();
             if (!input || input === '__PARQUET_TX_ID__') {
                 alert('Please enter a valid Arweave TX ID or URL');
@@ -299,14 +314,18 @@
 
                 const statsData = stats.toArray()[0];
 
-                document.getElementById('totalPapers').textContent = statsData.total.toLocaleString();
-                document.getElementById('onArweave').textContent = statsData.on_arweave.toLocaleString();
+                // Convert BigInt to Number for display
+                const total = Number(statsData.total);
+                const onArweave = Number(statsData.on_arweave);
+
+                document.getElementById('totalPapers').textContent = total.toLocaleString();
+                document.getElementById('onArweave').textContent = onArweave.toLocaleString();
                 document.getElementById('dataSize').textContent = 'Optimized';
 
                 document.getElementById('stats').style.display = 'grid';
                 document.getElementById('searchCard').style.display = 'block';
                 document.getElementById('results').innerHTML =
-                    '<div class="info-box">✅ Archive loaded! ' + statsData.total + ' papers available.</div>';
+                    '<div class="info-box">✅ Archive loaded! ' + total + ' papers available.</div>';
 
                 // Update data usage
                 totalBytes += 5000; // Estimate for metadata query
@@ -317,20 +336,20 @@
                 document.getElementById('results').innerHTML =
                     '<div class="warning-box">Failed to load archive: ' + error.message + '</div>';
             }
-        };
+        }
 
         // Load default archive if configured
-        window.loadDefault = function() {
+        function loadDefault() {
             const defaultTxId = document.getElementById('parquetInput').value;
             if (defaultTxId && defaultTxId !== '__PARQUET_TX_ID__') {
                 loadParquet();
             } else {
                 alert('No default archive configured. Please enter a TX ID.');
             }
-        };
+        }
 
         // Search papers
-        window.search = async function() {
+        async function search() {
             const term = document.getElementById('searchInput').value;
             const query = term ? `
                 SELECT id, title, authors, published, primary_category,
@@ -350,10 +369,10 @@
             `;
 
             await runQuery(query);
-        };
+        }
 
         // Browse latest papers
-        window.browse = async function() {
+        async function browse() {
             const query = `
                 SELECT id, title, authors, published, primary_category,
                        SUBSTRING(summary, 1, 300) as summary
@@ -363,10 +382,10 @@
             `;
 
             await runQuery(query);
-        };
+        }
 
         // Show statistics
-        window.showStats = async function() {
+        async function showStats() {
             const query = `
                 SELECT
                     primary_category,
@@ -382,14 +401,15 @@
 
             let html = '<h3>Top Categories</h3><ul>';
             categories.forEach(cat => {
-                html += `<li>${cat.primary_category}: ${cat.count} papers</li>`;
+                const count = Number(cat.count); // Convert BigInt to Number
+                html += `<li>${cat.primary_category}: ${count} papers</li>`;
             });
             html += '</ul>';
 
             document.getElementById('results').innerHTML = html;
             totalBytes += 2000;
             updateDataUsage();
-        };
+        }
 
         // Run query and display results
         async function runQuery(sql) {
@@ -410,19 +430,29 @@
 
                 let html = '';
                 papers.forEach(paper => {
-                    const date = new Date(paper.published).toLocaleDateString();
+                    // Convert all BigInt fields to regular numbers/strings
+                    const convertedPaper = {};
+                    for (const key in paper) {
+                        if (typeof paper[key] === 'bigint') {
+                            convertedPaper[key] = Number(paper[key]);
+                        } else {
+                            convertedPaper[key] = paper[key];
+                        }
+                    }
+
+                    const date = new Date(convertedPaper.published).toLocaleDateString();
                     html += `
                         <div class="paper">
-                            <div class="paper-title">${paper.title}</div>
+                            <div class="paper-title">${convertedPaper.title}</div>
                             <div class="paper-meta">
-                                <strong>Authors:</strong> ${paper.authors}
+                                <strong>Authors:</strong> ${convertedPaper.authors}
                             </div>
                             <div class="paper-meta">
                                 <strong>Published:</strong> ${date} |
-                                <strong>Category:</strong> ${paper.primary_category}
+                                <strong>Category:</strong> ${convertedPaper.primary_category}
                             </div>
                             <div class="paper-summary">
-                                ${paper.summary}...
+                                ${convertedPaper.summary}...
                             </div>
                         </div>
                     `;
@@ -452,6 +482,13 @@
             const initialized = await initDuckDB();
 
             if (initialized) {
+                // Attach event listeners to buttons
+                document.getElementById('loadBtn').addEventListener('click', loadParquet);
+                document.getElementById('loadDefaultBtn').addEventListener('click', loadDefault);
+                document.getElementById('searchBtn').addEventListener('click', search);
+                document.getElementById('browseBtn').addEventListener('click', browse);
+                document.getElementById('statsBtn').addEventListener('click', showStats);
+
                 // Check if default TX ID is set
                 const defaultInput = document.getElementById('parquetInput').value;
                 if (defaultInput && defaultInput !== '__PARQUET_TX_ID__') {

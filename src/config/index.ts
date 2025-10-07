@@ -1,20 +1,24 @@
 import { RateLimitOptions } from '../types';
+import * as dotenv from 'dotenv';
 
-export const ARXIV_API_BASE = 'http://export.arxiv.org/api/query';
-export const ARXIV_PDF_BASE = 'https://arxiv.org/pdf';
+// Load environment variables
+dotenv.config();
+
+export const ARXIV_API_BASE = process.env.ARXIV_API_BASE || 'http://export.arxiv.org/api/query';
+export const ARXIV_PDF_BASE = process.env.ARXIV_PDF_BASE || 'https://arxiv.org/pdf';
 
 export const DEFAULT_RATE_LIMIT: RateLimitOptions = {
-  maxConcurrent: 3,
-  requestsPerSecond: 1,
-  retryAttempts: 3,
-  retryDelay: 5000,
+  maxConcurrent: parseInt(process.env.MAX_CONCURRENT || '3'),
+  requestsPerSecond: parseInt(process.env.REQUESTS_PER_SECOND || '1'),
+  retryAttempts: parseInt(process.env.RETRY_ATTEMPTS || '3'),
+  retryDelay: parseInt(process.env.RETRY_DELAY || '5000'),
 };
 
-export const BATCH_SIZE = 100;
-export const DOWNLOAD_DIR = './downloads';
-export const DB_PATH = './arxiv.db';
+export const BATCH_SIZE = parseInt(process.env.BATCH_SIZE || '100');
+export const DOWNLOAD_DIR = process.env.DOWNLOAD_DIR || './downloads';
+export const DB_PATH = process.env.DB_PATH || './arxiv.db';
 
-export const USER_AGENT = 'ArxivScraper/1.0.0 (https://github.com/yourusername/arxiv-scraper)';
+export const USER_AGENT = process.env.USER_AGENT || 'ArxivScraper/1.0.0 (https://github.com/vilenarios/perma-arxiv)';
 
 export const CATEGORIES = [
   'cs.AI', 'cs.CL', 'cs.CV', 'cs.LG', 'cs.NE', 'cs.RO',

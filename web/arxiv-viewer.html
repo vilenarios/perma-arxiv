@@ -451,9 +451,14 @@
                 `);
 
                 const statsData = stats.toArray()[0];
-                document.getElementById('totalPapers').textContent = statsData.total.toLocaleString();
-                document.getElementById('totalCategories').textContent = statsData.categories;
-                document.getElementById('uploadedCount').textContent = statsData.uploaded;
+                // Convert BigInt to Number for display
+                const total = Number(statsData.total);
+                const categories = Number(statsData.categories);
+                const uploaded = Number(statsData.uploaded);
+
+                document.getElementById('totalPapers').textContent = total.toLocaleString();
+                document.getElementById('totalCategories').textContent = categories;
+                document.getElementById('uploadedCount').textContent = uploaded;
 
                 // Populate filters
                 await populateFilters();
@@ -568,7 +573,7 @@
             try {
                 const results = await conn.query(query);
                 const countResult = await conn.query(countQuery);
-                const totalCount = countResult.toArray()[0].total;
+                const totalCount = Number(countResult.toArray()[0].total); // Convert BigInt to Number
 
                 displayPapers(results.toArray());
                 displayPagination(totalCount);
@@ -591,6 +596,16 @@
             }
 
             container.innerHTML = papers.map(paper => {
+                // Convert all BigInt fields to regular numbers/strings
+                const convertedPaper = {};
+                for (const key in paper) {
+                    if (typeof paper[key] === 'bigint') {
+                        convertedPaper[key] = Number(paper[key]);
+                    } else {
+                        convertedPaper[key] = paper[key];
+                    }
+                }
+                paper = convertedPaper;
                 const categories = paper.all_categories ? paper.all_categories.split(',').map(c => c.trim()) : [];
                 const publishedDate = new Date(paper.published).toLocaleDateString();
                 const hasTransactionId = paper.transaction_id && paper.transaction_id !== 'null';
@@ -613,8 +628,10 @@
                         </div>
                         <div class="paper-links">
                             <a href="${paper.abstract_url}" target="_blank" class="paper-link">📄 ArXiv Page</a>
-                            <a href="${paper.pdf_url}" target="_blank" class="paper-link">📥 PDF</a>
-                            ${hasTransactionId ? `<a href="https://arweave.net/${paper.transaction_id}" target="_blank" class="paper-link">🔗 Arweave</a>` : ''}
+                            ${hasTransactionId
+                                ? `<a href="${paper.transaction_id}" target="_blank" class="paper-link">📥 PDF (Arweave)</a>`
+                                : `<a href="${paper.pdf_url}" target="_blank" class="paper-link">📥 PDF (ArXiv)</a>`
+                            }
                             <button onclick="toggleSummary('${paper.id}')" class="paper-link">📖 Read More</button>
                         </div>
                     </div>
@@ -694,8 +711,10 @@
                     </div>
                     <div style="margin: 20px 0; display: flex; gap: 10px;">
                         <a href="${paper.abstract_url}" target="_blank" class="paper-link">📄 View on ArXiv</a>
-                        <a href="${paper.pdf_url}" target="_blank" class="paper-link">📥 Download PDF</a>
-                        ${paper.transaction_id && paper.transaction_id !== 'null' ? `<a href="https://arweave.net/${paper.transaction_id}" target="_blank" class="paper-link">🔗 View on Arweave</a>` : ''}
+                        ${paper.transaction_id && paper.transaction_id !== 'null'
+                            ? `<a href="${paper.transaction_id}" target="_blank" class="paper-link">📥 Download PDF (Arweave)</a>`
+                            : `<a href="${paper.pdf_url}" target="_blank" class="paper-link">📥 Download PDF (ArXiv)</a>`
+                        }
                     </div>
                 `;
 

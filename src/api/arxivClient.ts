@@ -12,6 +12,7 @@ export class ArxivClient {
   private limiter: ReturnType<typeof pLimit>;
   private lastRequestTime: number = 0;
   private minRequestInterval: number;
+  private backoffUntil: number = 0;
 
   constructor() {
     this.client = axios.create({
@@ -35,8 +36,17 @@ export class ArxivClient {
 
   private async enforceRateLimit(): Promise<void> {
     const now = Date.now();
-    const timeSinceLastRequest = now - this.lastRequestTime;
 
+    // Check for 429 rate limit backoff period
+    if (this.backoffUntil && now < this.backoffUntil) {
+      const waitTime = this.backoffUntil - now;
+      logger.warn(`Rate limited (429), waiting ${(waitTime / 1000).toFixed(1)}s`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+      this.backoffUntil = 0; // Clear backoff after waiting
+    }
+
+    // Normal rate limiting
+    const timeSinceLastRequest = now - this.lastRequestTime;
     if (timeSinceLastRequest < this.minRequestInterval) {
       const waitTime = this.minRequestInterval - timeSinceLastRequest;
       await new Promise(resolve => setTimeout(resolve, waitTime));
@@ -104,15 +114,27 @@ export class ArxivClient {
         const response = await pRetry(
           async () => {
             logger.info('Fetching from ArXiv API', { params: queryParams });
-            const res = await this.client.get('', { params: queryParams });
-            return res;
+            try {
+              const res = await this.client.get('', { params: queryParams });
+              return res;
+            } catch (error: any) {
+              // Handle 429 rate limit specifically
+              if (error.response?.status === 429) {
+                const retryAfter = error.response.headers['retry-after'];
+                const backoffMs = retryAfter ? parseInt(retryAfter) * 1000 : 60000;
+                this.backoffUntil = Date.now() + backoffMs;
+                logger.error(`429 Rate Limit hit! Backing off for ${(backoffMs / 1000).toFixed(1)}s`);
+              }
+              throw error;
+            }
           },
           {
             retries: DEFAULT_RATE_LIMIT.retryAttempts,
             minTimeout: DEFAULT_RATE_LIMIT.retryDelay,
             onFailedAttempt: error => {
               logger.warn(`API request failed, attempt ${error.attemptNumber}/${DEFAULT_RATE_LIMIT.retryAttempts}`, {
-                error: error.message
+                error: error.message,
+                status: (error as any).response?.status
               });
             }
           }

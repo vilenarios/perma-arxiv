@@ -95,6 +95,18 @@ export class Database {
           )
         `, (err) => {
           if (err) reject(err);
+        });
+
+        this.db.run(`
+          CREATE TABLE IF NOT EXISTS checkpoints (
+            operation TEXT PRIMARY KEY,
+            last_completed_category TEXT,
+            last_completed_id TEXT,
+            progress_data TEXT,
+            timestamp TEXT DEFAULT CURRENT_TIMESTAMP
+          )
+        `, (err) => {
+          if (err) reject(err);
           else resolve();
         });
       });
@@ -136,6 +148,73 @@ export class Database {
       );
 
       stmt.finalize();
+    });
+  }
+
+  async upsertPaperBatch(papers: ArxivPaper[]): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.db.serialize(() => {
+        this.db.run('BEGIN TRANSACTION', (err) => {
+          if (err) {
+            reject(err);
+            return;
+          }
+        });
+
+        const stmt = this.db.prepare(`
+          INSERT OR REPLACE INTO papers (
+            id, version, updated, published, title, summary,
+            authors, categories, pdf_url, abstract_url,
+            comment, journal_ref, doi, last_checked, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        `);
+
+        let hasError = false;
+        let errorDetails: any = null;
+
+        for (const paper of papers) {
+          if (hasError) break;
+
+          stmt.run(
+            paper.id,
+            paper.version,
+            paper.updated,
+            paper.published,
+            paper.title,
+            paper.summary,
+            JSON.stringify(paper.authors),
+            JSON.stringify(paper.categories),
+            paper.pdfUrl,
+            paper.abstractUrl,
+            paper.comment,
+            paper.journalRef,
+            paper.doi,
+            (err) => {
+              if (err) {
+                hasError = true;
+                errorDetails = err;
+                logger.error('Failed to upsert paper in batch', { paperId: paper.id, error: err });
+              }
+            }
+          );
+        }
+
+        stmt.finalize((err) => {
+          if (err || hasError) {
+            this.db.run('ROLLBACK', () => {
+              reject(errorDetails || err);
+            });
+          } else {
+            this.db.run('COMMIT', (commitErr) => {
+              if (commitErr) {
+                reject(commitErr);
+              } else {
+                resolve();
+              }
+            });
+          }
+        });
+      });
     });
   }
 
@@ -360,6 +439,65 @@ export class Database {
         (err, rows) => {
           if (err) reject(err);
           else resolve(rows || []);
+        }
+      );
+    });
+  }
+
+  async saveCheckpoint(operation: string, data: {
+    lastCompletedCategory?: string;
+    lastCompletedId?: string;
+    progressData?: any;
+  }): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.db.run(
+        `INSERT OR REPLACE INTO checkpoints (
+          operation, last_completed_category, last_completed_id, progress_data, timestamp
+        ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+        [
+          operation,
+          data.lastCompletedCategory || null,
+          data.lastCompletedId || null,
+          data.progressData ? JSON.stringify(data.progressData) : null
+        ],
+        (err) => {
+          if (err) reject(err);
+          else resolve();
+        }
+      );
+    });
+  }
+
+  async loadCheckpoint(operation: string): Promise<any> {
+    return new Promise((resolve, reject) => {
+      this.db.get(
+        'SELECT * FROM checkpoints WHERE operation = ?',
+        [operation],
+        (err, row: any) => {
+          if (err) reject(err);
+          else if (row) {
+            resolve({
+              lastCompletedCategory: row.last_completed_category,
+              lastCompletedId: row.last_completed_id,
+              progressData: row.progress_data ? JSON.parse(row.progress_data) : null,
+              timestamp: row.timestamp
+            });
+          } else {
+            resolve(null);
+          }
+        }
+      );
+    });
+  }
+
+  async clearCheckpoint(operation: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.db.run(
+        'DELETE FROM checkpoints WHERE operation = ?',
+        [operation],
+        (err) => {
+          if (err) reject(err);
+          else resolve();
         }
       );
     });

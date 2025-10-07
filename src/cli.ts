@@ -605,4 +605,33 @@ program
     }
   });
 
+// Health check command
+program
+  .command('health')
+  .description('Run system health checks')
+  .action(async () => {
+    const { runHealthCheck } = await import('./utils/healthCheck');
+    await runHealthCheck();
+  });
+
+// Startup validation command
+program
+  .command('validate')
+  .description('Run startup validation checks')
+  .action(async () => {
+    const { StartupValidator } = await import('./utils/startup');
+    const validator = new StartupValidator();
+
+    try {
+      const results = await validator.validateAll();
+      console.log('\n✅ All startup validations passed\n');
+      console.log('Results:', JSON.stringify(results, null, 2));
+      process.exit(0);
+    } catch (error: any) {
+      console.error('\n❌ Startup validation failed\n');
+      console.error(error.message);
+      process.exit(1);
+    }
+  });
+
 program.parse(process.argv);

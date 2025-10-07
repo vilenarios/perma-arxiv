@@ -38,6 +38,8 @@ export class ArxivScraper {
     let totalDownloaded = 0;
     let totalFailed = 0;
     const maxPapers = options.maxPapers || Infinity;
+    let consecutiveFailures = 0;
+    const MAX_CONSECUTIVE_FAILURES = 3;
 
     let latestDate: string | null = null;
     if (options.incrementalOnly) {
@@ -81,9 +83,10 @@ export class ArxivScraper {
           }
         }
 
-        for (const paper of papersToProcess) {
-          await this.db.upsertPaper(paper);
-          totalProcessed++;
+        // Use batch transaction for atomic operation
+        if (papersToProcess.length > 0) {
+          await this.db.upsertPaperBatch(papersToProcess);
+          totalProcessed += papersToProcess.length;
         }
 
         logger.info(`Processed ${papersToProcess.length} papers (Total: ${totalProcessed}/${result.totalResults})`);
@@ -122,13 +125,34 @@ export class ArxivScraper {
 
         await new Promise(resolve => setTimeout(resolve, 1000));
 
-      } catch (error) {
-        logger.error('Error in scraping batch', { error, start, category });
+        // Reset failure counter on successful batch
+        consecutiveFailures = 0;
 
+      } catch (error) {
+        consecutiveFailures++;
+        logger.error('Error in scraping batch', {
+          error,
+          start,
+          category,
+          consecutiveFailures,
+          totalProcessed
+        });
+
+        // If we haven't processed anything yet, fail immediately
         if (totalProcessed === 0) {
           throw error;
         }
-        break;
+
+        // If too many consecutive failures, stop scraping this category
+        if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+          logger.error(`Too many consecutive failures (${consecutiveFailures}), stopping scrape for ${category}`);
+          break;
+        }
+
+        // Otherwise, continue to next batch after delay
+        logger.warn(`Continuing to next batch after failure (${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES})`);
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        start += BATCH_SIZE;
       }
     }
 
@@ -143,16 +167,39 @@ export class ArxivScraper {
 
   async scrapeAll(options: ScraperOptions = {}): Promise<void> {
     const categories = options.categories || CATEGORIES;
+    const checkpointName = 'scrape-all';
 
     logger.info(`Starting full scrape for ${categories.length} categories`);
 
-    for (const category of categories) {
+    // Check for existing checkpoint
+    const checkpoint = await this.db.loadCheckpoint(checkpointName);
+    let startIndex = 0;
+
+    if (checkpoint?.lastCompletedCategory) {
+      startIndex = categories.indexOf(checkpoint.lastCompletedCategory) + 1;
+      if (startIndex > 0 && startIndex < categories.length) {
+        logger.info(`📍 Resuming from checkpoint: ${categories[startIndex]} (skipped ${startIndex} completed categories)`);
+      } else {
+        startIndex = 0; // Invalid checkpoint, start from beginning
+      }
+    }
+
+    for (let i = startIndex; i < categories.length; i++) {
+      const category = categories[i];
       try {
         await this.scrapeCategory(category, options);
+        // Save checkpoint after each successful category
+        await this.db.saveCheckpoint(checkpointName, {
+          lastCompletedCategory: category
+        });
       } catch (error) {
         logger.error(`Failed to scrape category ${category}`, { error });
       }
     }
+
+    // Clear checkpoint after successful completion
+    await this.db.clearCheckpoint(checkpointName);
+    logger.info('✅ All categories completed, checkpoint cleared');
   }
 
   async downloadMissingPdfs(limit: number = 100): Promise<void> {

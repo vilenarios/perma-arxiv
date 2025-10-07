@@ -151,7 +151,7 @@ export class ImportanceCalculator {
   private async checkPapersWithCode(paper: ArxivPaper): Promise<{ rank?: number; stars?: number; score: number }> {
     try {
       // Check if paper exists on Papers with Code
-      const searchUrl = `https://paperswithcode.com/api/v1/papers/?arxiv_id=${paper.id}`;
+      // const searchUrl = `https://paperswithcode.com/api/v1/papers/?arxiv_id=${paper.id}`;
 
       // Simplified - would need actual API implementation
       // For now, return mock data based on title keywords
@@ -216,7 +216,7 @@ export class ImportanceCalculator {
       papers.map(paper => this.calculateImportance(paper))
     );
 
-    const importantPapers = papers.filter((paper, index) =>
+    const importantPapers = papers.filter((_paper, index) =>
       importanceData[index].importanceScore >= minScore ||
       (importanceData[index].citationCount || 0) >= this.config.minCitations
     );
