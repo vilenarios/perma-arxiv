@@ -19,7 +19,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // Configuration
-const WALLET_PATH = 'C:\\source\\arweave-keyfile-iKryOeZQMONi2965nKz528htMMN_sBcjlhc-VncoRjA.json';
+const WALLET_PATH = process.env.ARWEAVE_WALLET_PATH || './wallet.json';
 const HTML_PATH = path.join(__dirname, 'arxiv-viewer.html');
 const PARQUET_DIR = path.join(__dirname, '..', 'index');
 

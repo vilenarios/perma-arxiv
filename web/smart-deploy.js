@@ -20,7 +20,8 @@ const { execSync } = require('child_process');
 
 // __dirname is already available in CommonJS
 
-const WALLET_PATH = 'C:\\source\\arweave-keyfile-iKryOeZQMONi2965nKz528htMMN_sBcjlhc-VncoRjA.json';
+// Get wallet path from environment variable or use default
+const WALLET_PATH = process.env.ARWEAVE_WALLET_PATH || './wallet.json';
 
 class SmartDeployer {
     constructor() {

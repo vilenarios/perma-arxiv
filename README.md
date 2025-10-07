@@ -22,8 +22,8 @@ A robust ArXiv paper scraper built with Node.js and TypeScript that intelligentl
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/arxiv-scraper.git
-cd arxiv-scraper
+git clone https://github.com/vilenarios/perma-arxiv.git
+cd perma-arxiv
 
 # Install dependencies
 npm install

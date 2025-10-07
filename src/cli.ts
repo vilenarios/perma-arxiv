@@ -472,7 +472,7 @@ program
   .option('-b, --batch-size <number>', 'Number of papers per batch', parseInt, 10)
   .option('-d, --delay <number>', 'Delay between batches in ms', parseInt, 5000)
   .option('--dry-run', 'Simulate upload without actually uploading')
-  .option('-w, --wallet <path>', 'Path to Arweave wallet JWK file', 'C:\\source\\arweave-keyfile-iKryOeZQMONi2965nKz528htMMN_sBcjlhc-VncoRjA.json')
+  .option('-w, --wallet <path>', 'Path to Arweave wallet JWK file', process.env.ARWEAVE_WALLET_PATH || './wallet.json')
   .action(async (options) => {
     const { BatchProcessor } = await import('./arweave/batchProcessor');
     const processor = new BatchProcessor(options.wallet);
@@ -499,7 +499,7 @@ program
   .option('-b, --batch-size <number>', 'Number of papers per batch', parseInt, 10)
   .option('-d, --delay <number>', 'Delay between batches in ms', parseInt, 5000)
   .option('--dry-run', 'Simulate upload without actually uploading')
-  .option('-w, --wallet <path>', 'Path to Arweave wallet JWK file', 'C:\\source\\arweave-keyfile-iKryOeZQMONi2965nKz528htMMN_sBcjlhc-VncoRjA.json')
+  .option('-w, --wallet <path>', 'Path to Arweave wallet JWK file', process.env.ARWEAVE_WALLET_PATH || './wallet.json')
   .action(async (options) => {
     const { BatchProcessor } = await import('./arweave/batchProcessor');
     const processor = new BatchProcessor(options.wallet);
@@ -523,7 +523,7 @@ program
 program
   .command('upload:status')
   .description('Check upload status and statistics')
-  .option('-w, --wallet <path>', 'Path to Arweave wallet JWK file', 'C:\\source\\arweave-keyfile-iKryOeZQMONi2965nKz528htMMN_sBcjlhc-VncoRjA.json')
+  .option('-w, --wallet <path>', 'Path to Arweave wallet JWK file', process.env.ARWEAVE_WALLET_PATH || './wallet.json')
   .action(async (options) => {
     const { BatchProcessor } = await import('./arweave/batchProcessor');
     const processor = new BatchProcessor(options.wallet);
@@ -556,7 +556,7 @@ program
 program
   .command('upload:verify')
   .description('Verify uploaded papers on Arweave')
-  .option('-w, --wallet <path>', 'Path to Arweave wallet JWK file', 'C:\\source\\arweave-keyfile-iKryOeZQMONi2965nKz528htMMN_sBcjlhc-VncoRjA.json')
+  .option('-w, --wallet <path>', 'Path to Arweave wallet JWK file', process.env.ARWEAVE_WALLET_PATH || './wallet.json')
   .action(async (options) => {
     const { BatchProcessor } = await import('./arweave/batchProcessor');
     const processor = new BatchProcessor(options.wallet);
@@ -575,7 +575,7 @@ program
   .command('upload:cost')
   .description('Estimate upload costs')
   .option('-s, --size-mb <number>', 'File size in MB to estimate', parseFloat, 1)
-  .option('-w, --wallet <path>', 'Path to Arweave wallet JWK file', 'C:\\source\\arweave-keyfile-iKryOeZQMONi2965nKz528htMMN_sBcjlhc-VncoRjA.json')
+  .option('-w, --wallet <path>', 'Path to Arweave wallet JWK file', process.env.ARWEAVE_WALLET_PATH || './wallet.json')
   .action(async (options) => {
     const { TurboUploader } = await import('./arweave/turboUploader');
     const uploader = new TurboUploader(options.wallet);
