@@ -7,11 +7,13 @@ export interface ArxivPaper {
   authors: string[];
   categories: string[];
   pdfUrl: string;
+  htmlUrl: string;
   abstractUrl: string;
   version: number;
   comment?: string;
   journalRef?: string;
   doi?: string;
+  license?: string;
 }
 
 export interface ArxivQueryParams {

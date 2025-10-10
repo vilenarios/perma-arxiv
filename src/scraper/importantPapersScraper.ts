@@ -12,6 +12,7 @@ export interface ImportantPapersOptions {
   maxPapers?: number;
   downloadPdfs?: boolean;
   filterType?: 'all' | 'conference' | 'journal' | 'survey' | 'with-code';
+  useKeywordSearch?: boolean; // If false, just search by category without keywords
 }
 
 export class ImportantPapersScraper {
@@ -33,32 +34,48 @@ export class ImportantPapersScraper {
   }
 
   async scrapeImportantPapers(options: ImportantPapersOptions = {}): Promise<ArxivPaper[]> {
+    // Import ALL_CATEGORIES from config
+    const { ALL_CATEGORIES } = await import('../config');
+
     const {
-      categories = ['cs.LG', 'cs.AI'],
-      daysBack = 30,
+      categories = ALL_CATEGORIES, // Default to ALL categories
+      daysBack = 365, // Default to 1 year
       minScore = 10,
-      maxPapers = 100,
+      maxPapers = 100000, // Default to 100k max
       downloadPdfs = true,
-      filterType = 'all'
+      filterType = 'all',
+      useKeywordSearch = false // Default to category-only search for broader coverage
     } = options;
 
-    logger.info('Starting important papers scrape', options);
+    logger.info('Starting important papers scrape', {
+      categoryCount: categories.length,
+      daysBack,
+      minScore,
+      maxPapers,
+      useKeywordSearch
+    });
 
     // Build search queries for important papers
-    const searchQueries = this.buildSearchQueries(categories, daysBack);
+    const searchQueries = this.buildSearchQueries(categories, daysBack, useKeywordSearch);
     const allPapers: ArxivPaper[] = [];
+
+    // Calculate results per query based on maxPapers and number of queries
+    const resultsPerQuery = Math.min(2000, Math.ceil(maxPapers / searchQueries.length));
+
+    logger.info(`Fetching up to ${resultsPerQuery} papers per query (${searchQueries.length} queries total)`);
 
     for (const query of searchQueries) {
       logger.info(`Searching: ${query}`);
 
       const { papers } = await this.client.search({
         searchQuery: query,
-        maxResults: 200,
+        maxResults: resultsPerQuery,
         sortBy: 'lastUpdatedDate',
         sortOrder: 'descending'
       });
 
       allPapers.push(...papers);
+      logger.info(`  Found ${papers.length} papers`);
 
       // Rate limiting
       await new Promise(resolve => setTimeout(resolve, 1000));
@@ -100,7 +117,7 @@ export class ImportantPapersScraper {
 
       for (const [paperId, result] of results) {
         if (result.success && result.path) {
-          await this.db.markAsDownloaded(paperId, result.path);
+          await this.db.markAsDownloaded(paperId, result.path, result.format || 'pdf');
         }
       }
     }
@@ -108,7 +125,7 @@ export class ImportantPapersScraper {
     return importantPapers;
   }
 
-  private buildSearchQueries(categories: string[], daysBack: number): string[] {
+  private buildSearchQueries(categories: string[], daysBack: number, useKeywordSearch: boolean = false): string[] {
     const queries: string[] = [];
     const endDate = new Date();
     const startDate = new Date();
@@ -116,7 +133,15 @@ export class ImportantPapersScraper {
 
     const dateRange = `submittedDate:[${this.formatDate(startDate)} TO ${this.formatDate(endDate)}]`;
 
-    // Search for important keywords in each category
+    if (!useKeywordSearch) {
+      // Simple category search for broader coverage
+      for (const category of categories) {
+        queries.push(`cat:${category} AND ${dateRange}`);
+      }
+      return queries;
+    }
+
+    // Search for important keywords in each category (narrower, more targeted)
     const importantTerms = [
       'state-of-the-art',
       'benchmark',

@@ -1,5 +1,6 @@
 import { Database } from '../database';
 import { TurboUploader } from './turboUploader';
+import { ArnsManager } from './arnsManager';
 // ParquetUpdater removed - Parquet files are re-exported from SQLite after uploads
 import logger from '../utils/logger';
 import fs from 'fs/promises';
@@ -9,25 +10,53 @@ export interface BatchUploadOptions {
   maxRetries?: number;
   delayBetweenBatches?: number;
   dryRun?: boolean;
+  updateArns?: boolean;
 }
 
 export class BatchProcessor {
   private db: Database;
   private uploader: TurboUploader;
+  private arnsManager: ArnsManager | null;
 
   constructor(
     walletPath: string = './wallet.json',
     dbPath?: string,
-    _indexDir?: string
+    _indexDir?: string,
+    enableArns: boolean = true
   ) {
     this.db = new Database(dbPath);
     this.uploader = new TurboUploader(walletPath);
+    this.arnsManager = enableArns ? new ArnsManager(walletPath) : null;
     // Parquet files are re-exported after uploads, not updated directly
   }
 
   async initialize(): Promise<void> {
     await this.db.initialize();
     await this.uploader.initialize();
+  }
+
+  /**
+   * Update ArNS data index after parquet export and upload
+   */
+  async updateDataIndex(parquetTxId: string, undername: string = '@'): Promise<void> {
+    if (!this.arnsManager) {
+      logger.warn('ArNS manager not enabled, skipping data index update');
+      return;
+    }
+
+    logger.info('Updating data_arxiv ArNS record with new parquet file', {
+      transactionId: parquetTxId,
+      undername
+    });
+
+    const result = await this.arnsManager.updateDataIndex(parquetTxId, undername);
+
+    if (result.success) {
+      logger.info('✅ data_arxiv updated successfully', { messageId: result.messageId });
+    } else {
+      logger.error('❌ Failed to update data_arxiv', { error: result.error });
+      throw new Error(`ArNS update failed: ${result.error}`);
+    }
   }
 
   async processBatch(options: BatchUploadOptions = {}): Promise<void> {

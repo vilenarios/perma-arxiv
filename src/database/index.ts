@@ -30,11 +30,13 @@ export class Database {
             authors TEXT,
             categories TEXT,
             pdf_url TEXT,
+            html_url TEXT,
             abstract_url TEXT,
             comment TEXT,
             journal_ref TEXT,
             doi TEXT,
             downloaded BOOLEAN DEFAULT 0,
+            download_format TEXT,
             download_path TEXT,
             download_date TEXT,
             last_checked TEXT,
@@ -106,8 +108,21 @@ export class Database {
             timestamp TEXT DEFAULT CURRENT_TIMESTAMP
           )
         `, (err) => {
-          if (err) reject(err);
-          else resolve();
+          if (err) {
+            reject(err);
+          } else {
+            // Migration: Add html_url, download_format, and license columns if they don't exist
+            this.db.run(`ALTER TABLE papers ADD COLUMN html_url TEXT`, () => {
+              // Ignore error if column already exists
+            });
+            this.db.run(`ALTER TABLE papers ADD COLUMN download_format TEXT`, () => {
+              // Ignore error if column already exists
+            });
+            this.db.run(`ALTER TABLE papers ADD COLUMN license TEXT`, () => {
+              // Ignore error if column already exists
+              resolve();
+            });
+          }
         });
       });
     });
@@ -118,9 +133,9 @@ export class Database {
       const stmt = this.db.prepare(`
         INSERT OR REPLACE INTO papers (
           id, version, updated, published, title, summary,
-          authors, categories, pdf_url, abstract_url,
-          comment, journal_ref, doi, last_checked, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          authors, categories, pdf_url, html_url, abstract_url,
+          comment, journal_ref, doi, license, last_checked, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `);
 
       stmt.run(
@@ -133,10 +148,12 @@ export class Database {
         JSON.stringify(paper.authors),
         JSON.stringify(paper.categories),
         paper.pdfUrl,
+        paper.htmlUrl,
         paper.abstractUrl,
         paper.comment,
         paper.journalRef,
         paper.doi,
+        paper.license,
         (err) => {
           if (err) {
             logger.error('Failed to upsert paper', { paperId: paper.id, error: err });
@@ -164,9 +181,9 @@ export class Database {
         const stmt = this.db.prepare(`
           INSERT OR REPLACE INTO papers (
             id, version, updated, published, title, summary,
-            authors, categories, pdf_url, abstract_url,
-            comment, journal_ref, doi, last_checked, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            authors, categories, pdf_url, html_url, abstract_url,
+            comment, journal_ref, doi, license, last_checked, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         `);
 
         let hasError = false;
@@ -185,10 +202,12 @@ export class Database {
             JSON.stringify(paper.authors),
             JSON.stringify(paper.categories),
             paper.pdfUrl,
+            paper.htmlUrl,
             paper.abstractUrl,
             paper.comment,
             paper.journalRef,
             paper.doi,
+            paper.license,
             (err) => {
               if (err) {
                 hasError = true;
@@ -237,10 +256,12 @@ export class Database {
               authors: JSON.parse(row.authors),
               categories: JSON.parse(row.categories),
               pdfUrl: row.pdf_url,
+              htmlUrl: row.html_url || `https://arxiv.org/html/${row.id}`,
               abstractUrl: row.abstract_url,
               comment: row.comment,
               journalRef: row.journal_ref,
-              doi: row.doi
+              doi: row.doi,
+              license: row.license
             });
           } else {
             resolve(null);
@@ -250,13 +271,13 @@ export class Database {
     });
   }
 
-  async markAsDownloaded(id: string, downloadPath: string): Promise<void> {
+  async markAsDownloaded(id: string, downloadPath: string, format: 'html' | 'pdf' = 'pdf'): Promise<void> {
     return new Promise((resolve, reject) => {
       this.db.run(
         `UPDATE papers
-         SET downloaded = 1, download_path = ?, download_date = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+         SET downloaded = 1, download_path = ?, download_format = ?, download_date = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
          WHERE id = ?`,
-        [downloadPath, id],
+        [downloadPath, format, id],
         (err) => {
           if (err) reject(err);
           else resolve();
@@ -307,10 +328,12 @@ export class Database {
               authors: JSON.parse(row.authors),
               categories: JSON.parse(row.categories),
               pdfUrl: row.pdf_url,
+              htmlUrl: row.html_url || `https://arxiv.org/html/${row.id}`,
               abstractUrl: row.abstract_url,
               comment: row.comment,
               journalRef: row.journal_ref,
-              doi: row.doi
+              doi: row.doi,
+              license: row.license
             }));
             resolve(papers);
           }

@@ -52,13 +52,15 @@ program
 program
   .command('download')
   .description('Download missing PDFs')
-  .option('-l, --limit <number>', 'Maximum PDFs to download', parseInt, 100)
+  .option('-l, --limit <number>', 'Maximum PDFs to download', (val) => parseInt(val, 10), 100)
   .action(async (options) => {
     const scraper = new ArxivScraper();
 
     try {
       await scraper.initialize();
-      await scraper.downloadMissingPdfs(options.limit);
+      const limit = options.limit || 100;
+      logger.info(`Download limit set to: ${limit}`);
+      await scraper.downloadMissingPdfs(limit);
       await scraper.close();
     } catch (error) {
       logger.error('Download failed', { error });
@@ -101,8 +103,8 @@ program
 
         for (const [paperId, result] of results) {
           if (result.success && result.path) {
-            await db.markAsDownloaded(paperId, result.path);
-            console.log(`Downloaded: ${paperId}`);
+            await db.markAsDownloaded(paperId, result.path, result.format || 'pdf');
+            console.log(`Downloaded (${result.format}): ${paperId}`);
           } else {
             console.error(`Failed to download ${paperId}: ${result.error}`);
           }
@@ -238,11 +240,11 @@ program
 
 program
   .command('scrape-important')
-  .description('Scrape only the most important papers using smart filtering')
-  .option('-c, --categories <categories...>', 'Categories to scrape', ['cs.LG', 'cs.AI'])
-  .option('-d, --days <number>', 'Days back to search', parseInt, 30)
-  .option('-s, --min-score <number>', 'Minimum importance score', parseInt, 10)
-  .option('-n, --number <number>', 'Maximum papers to collect', parseInt, 50)
+  .description('Scrape only the most important papers using smart filtering (defaults to ALL categories, 1 year)')
+  .option('-c, --categories <categories...>', 'Categories to scrape (default: all 155+ categories)')
+  .option('-d, --days <number>', 'Days back to search (default: 365)', parseInt)
+  .option('-s, --min-score <number>', 'Minimum importance score (default: 10)', parseInt)
+  .option('-n, --number <number>', 'Maximum papers to collect (default: 100000)', parseInt)
   .option('--no-download', 'Skip PDF downloads')
   .option('-t, --type <type>', 'Filter type: all, conference, journal, survey, with-code', 'all')
   .option('--weekly', 'Get top papers from this week')
@@ -630,6 +632,237 @@ program
     } catch (error: any) {
       console.error('\n❌ Startup validation failed\n');
       console.error(error.message);
+      process.exit(1);
+    }
+  });
+
+// ArNS commands
+program
+  .command('arns:update-site')
+  .description('Update arxiv ArNS name to point to new deployment')
+  .argument('<transaction-id>', 'Arweave transaction ID of the deployed site')
+  .option('-w, --wallet <path>', 'Path to Arweave wallet', process.env.ARWEAVE_WALLET_PATH || './wallet.json')
+  .action(async (transactionId, options) => {
+    const { ArnsManager } = await import('./arweave/arnsManager');
+    const manager = new ArnsManager(options.wallet);
+
+    try {
+      console.log(`\n🔄 Updating arxiv ArNS name to point to ${transactionId}...`);
+      const result = await manager.updateMainSite(transactionId);
+
+      if (result.success) {
+        console.log('✅ ArNS record updated successfully!');
+        console.log(`Message ID: ${result.messageId}`);
+        console.log(`\n🌐 Your site is now accessible at: https://arxiv.arweave.net\n`);
+      } else {
+        console.error('❌ Failed to update ArNS record:', result.error);
+        process.exit(1);
+      }
+    } catch (error) {
+      logger.error('ArNS update failed', { error });
+      process.exit(1);
+    }
+  });
+
+program
+  .command('arns:update-data')
+  .description('Update data_arxiv ArNS name to point to new parquet file')
+  .argument('<transaction-id>', 'Arweave transaction ID of the parquet file')
+  .option('-u, --undername <name>', 'Undername to update (default: @)', '@')
+  .option('-w, --wallet <path>', 'Path to Arweave wallet', process.env.ARWEAVE_WALLET_PATH || './wallet.json')
+  .action(async (transactionId, options) => {
+    const { ArnsManager } = await import('./arweave/arnsManager');
+    const manager = new ArnsManager(options.wallet);
+
+    try {
+      console.log(`\n🔄 Updating data_arxiv ArNS ${options.undername} to point to ${transactionId}...`);
+      const result = await manager.updateDataIndex(transactionId, options.undername);
+
+      if (result.success) {
+        console.log('✅ ArNS data record updated successfully!');
+        console.log(`Message ID: ${result.messageId}`);
+        console.log(`\n🌐 Data is now accessible at: https://data_arxiv.arweave.net\n`);
+      } else {
+        console.error('❌ Failed to update ArNS record:', result.error);
+        process.exit(1);
+      }
+    } catch (error) {
+      logger.error('ArNS data update failed', { error });
+      process.exit(1);
+    }
+  });
+
+program
+  .command('arns:status')
+  .description('Show current ArNS configuration and state')
+  .option('-w, --wallet <path>', 'Path to Arweave wallet', process.env.ARWEAVE_WALLET_PATH || './wallet.json')
+  .action(async (options) => {
+    const { ArnsManager } = await import('./arweave/arnsManager');
+    const { ARNS_NAME_MAIN, ARNS_NAME_DATA, ANT_PROCESS_ID_MAIN, ANT_PROCESS_ID_DATA } = await import('./config');
+
+    try {
+      console.log('\n=== ArNS Configuration ===\n');
+      console.log(`Main site name: ${ARNS_NAME_MAIN}`);
+      console.log(`Data name: ${ARNS_NAME_DATA}`);
+      console.log(`ANT Process ID (main): ${ANT_PROCESS_ID_MAIN || '⚠️  NOT SET'}`);
+      console.log(`ANT Process ID (data): ${ANT_PROCESS_ID_DATA || '⚠️  NOT SET'}`);
+
+      const manager = new ArnsManager(options.wallet);
+
+      if (ANT_PROCESS_ID_MAIN) {
+        console.log('\n=== Main Site Records ===');
+        const mainState = await manager.getMainSiteState();
+        console.log(JSON.stringify(mainState.Records || {}, null, 2));
+      }
+
+      if (ANT_PROCESS_ID_DATA) {
+        console.log('\n=== Data Index Records ===');
+        const dataState = await manager.getDataIndexState();
+        console.log(JSON.stringify(dataState.Records || {}, null, 2));
+      }
+
+      console.log('');
+    } catch (error) {
+      logger.error('Failed to get ArNS status', { error });
+      process.exit(1);
+    }
+  });
+
+program
+  .command('arns:test')
+  .description('Test ArNS configuration and connectivity')
+  .option('-w, --wallet <path>', 'Path to Arweave wallet', process.env.ARWEAVE_WALLET_PATH || './wallet.json')
+  .action(async (options) => {
+    const { ArnsManager } = await import('./arweave/arnsManager');
+    const { ANT_PROCESS_ID_MAIN, ANT_PROCESS_ID_DATA } = await import('./config');
+
+    console.log('\n🧪 Testing ArNS configuration...\n');
+
+    try {
+      // Test 1: Check environment variables
+      console.log('1. Checking environment variables...');
+      if (!ANT_PROCESS_ID_MAIN) console.warn('   ⚠️  ANT_PROCESS_ID_MAIN not set');
+      else console.log('   ✅ ANT_PROCESS_ID_MAIN configured');
+
+      if (!ANT_PROCESS_ID_DATA) console.warn('   ⚠️  ANT_PROCESS_ID_DATA not set');
+      else console.log('   ✅ ANT_PROCESS_ID_DATA configured');
+
+      // Test 2: Initialize ArnsManager
+      console.log('\n2. Initializing ArnsManager...');
+      const manager = new ArnsManager(options.wallet);
+      console.log('   ✅ ArnsManager initialized');
+
+      // Test 3: Verify configuration
+      console.log('\n3. Verifying ANT accessibility...');
+      const verification = await manager.verifyConfiguration();
+
+      if (verification.valid) {
+        console.log('   ✅ All ANTs accessible');
+      } else {
+        console.log('   ❌ Configuration errors:');
+        verification.errors.forEach(err => console.log(`      - ${err}`));
+      }
+
+      console.log('\n' + (verification.valid ? '🎉 All tests passed!' : '❌ Some tests failed'));
+      process.exit(verification.valid ? 0 : 1);
+    } catch (error: any) {
+      console.error('\n❌ Test failed:', error.message);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('index:export-upload')
+  .description('Export database to Parquet, upload to Arweave, and update ArNS')
+  .option('-b, --batch-size <number>', 'Batch size for export', parseInt, 10000)
+  .option('--no-upload', 'Skip Arweave upload')
+  .option('--no-arns', 'Skip ArNS update')
+  .option('-w, --wallet <path>', 'Path to Arweave wallet', process.env.ARWEAVE_WALLET_PATH || './wallet.json')
+  .action(async (options) => {
+    const { ParquetExporter } = await import('./index/parquetExporter');
+    const exporter = new ParquetExporter();
+
+    try {
+      await exporter.initialize();
+
+      console.log('\n📦 Exporting database to Parquet format...');
+
+      const result = await exporter.exportAndUpload(
+        options.upload,
+        options.arns,
+        options.wallet
+      );
+
+      console.log(`\n✅ Export completed! Created ${result.files.length} Parquet file(s)`);
+
+      if (result.transactionId) {
+        console.log(`\n📤 Uploaded to Arweave: ${result.transactionId}`);
+        console.log(`🌐 Data accessible at: https://data_arxiv.arweave.net\n`);
+      }
+
+      await exporter.close();
+    } catch (error) {
+      logger.error('Export and upload failed', { error });
+      process.exit(1);
+    }
+  });
+
+program
+  .command('web:deploy')
+  .description('Deploy web viewer to Arweave and update arxiv ArNS')
+  .argument('<html-file>', 'Path to HTML file to deploy')
+  .option('-w, --wallet <path>', 'Path to Arweave wallet', process.env.ARWEAVE_WALLET_PATH || './wallet.json')
+  .action(async (htmlFile: string, options) => {
+    try {
+      const { TurboUploader } = await import('./arweave/turboUploader');
+      const { ArnsManager } = await import('./arweave/arnsManager');
+      const path = await import('path');
+
+      console.log('\n🚀 Deploying web viewer to Arweave...\n');
+
+      // Initialize uploader
+      const uploader = new TurboUploader(options.wallet);
+      await uploader.initialize();
+
+      // Read and upload HTML file
+      const htmlPath = path.resolve(htmlFile);
+      logger.info('Uploading web viewer', { file: htmlPath });
+
+      const uploadResult = await uploader.uploadPaper(
+        htmlPath,
+        'web-viewer',
+        {
+          title: 'Permanent arXiv Web Viewer',
+          authors: 'PermaArxiv',
+          categories: 'web',
+          published: new Date().toISOString()
+        }
+      );
+
+      if (!uploadResult || !uploadResult.id) {
+        throw new Error('Upload failed - no transaction ID returned');
+      }
+
+      console.log(`✅ Web viewer uploaded: ${uploadResult.id}`);
+      console.log(`   https://arweave.net/${uploadResult.id}\n`);
+
+      // Update ArNS
+      console.log('🔄 Updating arxiv ArNS record...\n');
+      const arnsManager = new ArnsManager(options.wallet);
+      const result = await arnsManager.updateMainSite(uploadResult.id);
+
+      if (result.success) {
+        console.log('✅ ArNS record updated successfully!');
+        console.log(`   Message ID: ${result.messageId}\n`);
+        console.log('🌐 Your site is now accessible at:');
+        console.log('   https://arxiv.ar.io');
+        console.log('   https://arxiv.arweave.net');
+      } else {
+        throw new Error(`ArNS update failed: ${result.error}`);
+      }
+    } catch (error: any) {
+      console.error('\n❌ Deployment failed:', error.message);
+      logger.error('Web deployment failed', { error });
       process.exit(1);
     }
   });

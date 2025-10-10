@@ -106,7 +106,7 @@ export class ArxivScraper {
 
             for (const [paperId, result] of downloadResults) {
               if (result.success && result.path) {
-                await this.db.markAsDownloaded(paperId, result.path);
+                await this.db.markAsDownloaded(paperId, result.path, result.format || 'pdf');
                 totalDownloaded++;
               } else if (result.error) {
                 await this.db.markAsError(paperId, result.error);
@@ -213,23 +213,31 @@ export class ArxivScraper {
     }
 
     logger.info(`Found ${papers.length} papers to download`);
+    logger.info('Starting downloads (HTML preferred, PDF fallback)...');
 
     const downloadResults = await this.downloader.downloadBatch(papers);
 
     let successCount = 0;
     let failureCount = 0;
+    let htmlCount = 0;
+    let pdfCount = 0;
 
     for (const [paperId, result] of downloadResults) {
       if (result.success && result.path) {
-        await this.db.markAsDownloaded(paperId, result.path);
+        await this.db.markAsDownloaded(paperId, result.path, result.format || 'pdf');
         successCount++;
+        if (result.format === 'html') {
+          htmlCount++;
+        } else {
+          pdfCount++;
+        }
       } else if (result.error) {
         await this.db.markAsError(paperId, result.error);
         failureCount++;
       }
     }
 
-    logger.info(`Download completed: ${successCount} successful, ${failureCount} failed`);
+    logger.info(`Download completed: ${successCount} successful (${htmlCount} HTML, ${pdfCount} PDF), ${failureCount} failed`);
   }
 
   async incrementalSync(options: ScraperOptions = {}): Promise<void> {

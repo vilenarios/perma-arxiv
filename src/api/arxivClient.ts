@@ -76,12 +76,14 @@ export class ArxivClient {
       summary: entry.summary.replace(/\s+/g, ' ').trim(),
       authors,
       categories,
-      pdfUrl: `https://arxiv.org/pdf/${id}.pdf`,
+      pdfUrl: `https://export.arxiv.org/pdf/${id}.pdf`,
+      htmlUrl: `https://export.arxiv.org/html/${id}`,
       abstractUrl: entry.id,
       version,
       comment: entry['arxiv:comment']?.['#text'],
       journalRef: entry['arxiv:journal_ref']?.['#text'],
-      doi: entry['arxiv:doi']?.['#text']
+      doi: entry['arxiv:doi']?.['#text'],
+      license: entry.rights || entry['dc:rights']
     };
   }
 

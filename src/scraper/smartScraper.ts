@@ -97,7 +97,7 @@ export class SmartScraper {
 
       for (const [paperId, result] of results) {
         if (result.success && result.path) {
-          await this.db.markAsDownloaded(paperId, result.path);
+          await this.db.markAsDownloaded(paperId, result.path, result.format || 'pdf');
         }
       }
     }
