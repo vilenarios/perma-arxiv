@@ -1,0 +1,90 @@
+@import url('https://fonts.googleapis.com/css2?family=Catamaran:wght@400;500;600;700&family=Frank+Ruhl+Libre:wght@400;500;700&family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+/* Base styles using CSS variables */
+:root {
+  --font-body: 'Frank Ruhl Libre', Georgia, serif;
+  --font-heading: 'Catamaran', sans-serif;
+  --font-label: 'IBM Plex Sans Condensed', sans-serif;
+
+  --color-arxiv-grey: #6b6459;
+  --color-arxiv-red: #b31b1b;
+  --color-arxiv-pink: #fb595a;
+  --color-arxiv-warm-bg: #f9f7f7;
+  --color-arxiv-blue: #1a1a1a;
+  --color-arxiv-light-blue: #a5d6fe;
+  --color-arxiv-cool-bg: #f7fafc;
+  --color-arxiv-lime: #c4d82e;
+  --color-arxiv-link: #2c3e50;
+  --color-arxiv-text: #1c1a17;
+}
+
+body {
+  font-family: var(--font-body);
+  color: var(--color-arxiv-text);
+  margin: 0;
+  min-height: 100vh;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  color: var(--color-arxiv-grey);
+}
+
+a {
+  color: var(--color-arxiv-link);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* Component styles */
+.arxiv-button {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.25rem;
+  transition: all 0.2s;
+  cursor: pointer;
+  border: none;
+  display: inline-block;
+}
+
+.arxiv-button-primary {
+  background-color: var(--color-arxiv-blue);
+  color: white;
+}
+
+.arxiv-button-primary:hover {
+  background-color: var(--color-arxiv-pink);
+}
+
+.paper-card {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+  transition: box-shadow 0.2s;
+}
+
+.paper-card:hover {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.category-tag {
+  font-family: var(--font-label);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  display: inline-block;
+}

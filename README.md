@@ -6,17 +6,19 @@ A robust ArXiv paper scraper built with Node.js and TypeScript that intelligentl
 
 ### 🎯 Smart Importance Detection
 - **Automatic Paper Scoring**: Identifies important papers using metadata signals (conferences, journals, citations, code availability)
-- **Selective Scraping**: Download only the top 1-5% of papers instead of everything
+- **Selective Scraping**: Download only the top papers across ALL 155+ ArXiv categories
 - **Multiple Filter Types**: Conference papers, journal publications, surveys, papers with code
 
 ### 🚀 Core Capabilities
-- **Robust Error Handling**: Automatic retries with exponential backoff
-- **Rate Limiting**: Respects ArXiv API limits
+- **ALL Categories**: Searches **155+ ArXiv categories** across all disciplines (CS, Math, Physics, Biology, Finance, etc.)
+- **HTML-First Downloads**: Downloads HTML format (better for AI/LLM processing) with automatic PDF fallback
+- **License Tracking**: Captures Creative Commons and arXiv licenses for compliance
+- **Burst Mode Rate Limiting**: 4 req/sec with intelligent backoff (uses `export.arxiv.org`)
+- **Robust Error Handling**: Automatic retries with exponential backoff, 404 abort
 - **Incremental Sync**: Only downloads new papers since last sync
-- **PDF Download Management**: Organized storage with resume support
 - **Dual Database Architecture**: SQLite for scraping, Parquet/DuckDB for analytics
 - **Full-Text Search**: Search across titles, summaries, and authors
-- **Arweave Ready**: Parquet format optimized for permanent decentralized storage
+- **Arweave Ready**: Parquet format optimized for permanent decentralized storage with ArNS dynamic updates
 
 ## Installation
 
@@ -170,21 +172,26 @@ Scrape → SQLite → Export → Parquet → Query with DuckDB → Upload to Arw
 
 ```
 arxiv-scraper/
-├── dist/              # Compiled JavaScript
+├── dist/              # Compiled CLI JavaScript (from npm run build)
 ├── downloads/         # PDFs organized by category
 ├── index/             # Parquet files for analytics
-├── src/               # TypeScript source
+├── src/               # TypeScript CLI source
 │   ├── api/          # ArXiv API client
-│   ├── arweave/      # Arweave upload system
+│   ├── arweave/      # Arweave upload system & ArNS integration
 │   ├── database/     # SQLite layer
 │   ├── downloader/   # PDF downloader
 │   ├── importance/   # Smart filtering system
 │   ├── index/        # Parquet/DuckDB
 │   └── scraper/      # Core scraping logic
+├── arxiv-app/         # React web viewer
+│   ├── dist/         # Built web app (from npm run build)
+│   ├── src/          # React components & DuckDB WASM integration
+│   └── package.json  # Web app dependencies
 ├── arxiv.db          # SQLite database
 ├── wallet.json       # Arweave wallet (not committed)
 ├── ADMIN_GUIDE.md    # Detailed documentation
-└── package.json
+├── CLAUDE.md         # AI assistant guide
+└── package.json      # CLI dependencies
 ```
 
 ## Advanced Features
@@ -260,6 +267,23 @@ node dist/cli.js upload:status
 
 # 5. Verify on Arweave
 node dist/cli.js upload:verify
+```
+
+### Web Viewer Deployment
+
+```bash
+# Build the React app
+cd arxiv-app
+npm install
+npm run build
+cd ..
+
+# Deploy to Arweave and update ArNS
+node dist/cli.js web:deploy arxiv-app/dist
+
+# Your site will be available at:
+# - https://arxiv.ar.io
+# - https://arxiv.arweave.net
 ```
 
 ### Features

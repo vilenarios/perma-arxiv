@@ -1,13 +1,23 @@
+# Node modules
 node_modules/
+packages/*/node_modules/
+
+# Build outputs
 dist/
+packages/*/dist/
+
+# Logs
 *.log
+data/logs/
+
+# Environment
 .env
 .env.local
+
+# Runtime data (entire data folder)
 data/
-downloads/
-index/
-arxiv.db
-arxiv.db-journal
+
+# Temporary files
 .DS_Store
 *.tmp
 *.lock
